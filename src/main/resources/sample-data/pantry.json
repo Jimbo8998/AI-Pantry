@@ -1,0 +1,5 @@
+[
+  {"name":"chicken breast","quantity":2,"unit":"piece","expiresOn":"2025-09-02"},
+  {"name":"spinach","quantity":200,"unit":"g","expiresOn":"2025-08-31"},
+  {"name":"tortilla","quantity":6,"unit":"piece","expiresOn":"2025-09-10"}
+]

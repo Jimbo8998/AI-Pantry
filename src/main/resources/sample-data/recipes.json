@@ -1,0 +1,20 @@
+[
+  {
+    "title":"Chicken Spinach Wraps",
+    "cookMinutes":20,
+    "tags":["quick"],
+    "ingredients":[
+      {"name":"chicken breast","amount":2,"unit":"piece"},
+      {"name":"spinach","amount":150,"unit":"g"},
+      {"name":"tortilla","amount":4,"unit":"piece"}
+    ]
+  },
+  {
+    "title":"Spinach Omelette",
+    "cookMinutes":10,
+    "tags":["vegetarian","quick"],
+    "ingredients":[
+      {"name":"spinach","amount":100,"unit":"g"}
+    ]
+  }
+]

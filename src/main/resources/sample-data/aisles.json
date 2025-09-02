@@ -1,0 +1,18 @@
+{
+  "order": ["Produce", "Dairy", "Pantry", "Frozen", "Bakery", "Meat", "Other"],
+  "map": {
+    "spinach": "Produce",
+    "onion": "Produce",
+    "garlic": "Produce",
+    "milk": "Dairy",
+    "cheddar": "Dairy",
+    "egg": "Dairy",
+    "flour": "Pantry",
+    "sugar": "Pantry",
+    "rice": "Pantry",
+    "chicken breast": "Meat",
+    "ground beef": "Meat",
+    "frozen peas": "Frozen",
+    "bread": "Bakery"
+  }
+}

@@ -1,0 +1,30 @@
+# Maven
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDEs & editors
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Java/FX runtime caches
+hs_err_pid*
+
+# Build outputs
+bin/
+
+# Local settings
+*.local.json
+
+# Generated docs (optional to include; uncomment to ignore)
+# doc/
