@@ -211,7 +211,7 @@ public class MainView extends BorderPane {
             }
         });
 
-        Button save = new Button("Save Pantry JSON…");
+    Button save = new Button("Save Pantry JSON…");
         save.setOnAction(e -> {
             try {
                 FileChooser fc = new FileChooser();
@@ -222,13 +222,36 @@ public class MainView extends BorderPane {
             } catch (Exception ex) { showError(ex); }
         });
 
+    Button seed = new Button("Seed Sample Pantry");
+    seed.setOnAction(e -> seedSamplePantry());
+
     Button undoBtn = new Button("Undo");
     undoBtn.setOnAction(e -> doUndo());
-    ToolBar tb = new ToolBar(add, del, undoBtn, new Separator(), save);
+    ToolBar tb = new ToolBar(add, del, undoBtn, new Separator(), save, new Separator(), seed);
         BorderPane box = new BorderPane(pantryTable);
         box.setTop(tb);
         t.setContent(box);
         return t;
+    }
+
+    private void seedSamplePantry() {
+        // Simple seed set; units align with current Units defaults (g, ml, piece)
+        List<PantryItem> demo = List.of(
+                new PantryItem("Onions", 2, "piece", java.time.LocalDate.now().plusDays(2)),
+                new PantryItem("bell peppers", 1, "piece", java.time.LocalDate.now().plusDays(5)),
+                new PantryItem("beef mince", 450, "g", java.time.LocalDate.now().plusDays(3)),
+                new PantryItem("rice", 2, "cup", null),
+                new PantryItem("tortilla", 8, "piece", java.time.LocalDate.now().plusDays(14)),
+                new PantryItem("soy sauce", 100, "ml", null),
+                new PantryItem("egg", 6, "piece", java.time.LocalDate.now().plusDays(20)),
+                new PantryItem("broth", 500, "ml", java.time.LocalDate.now().plusDays(30)),
+                new PantryItem("garlic", 4, "piece", java.time.LocalDate.now().plusDays(10)),
+                new PantryItem("cheddar", 150, "g", java.time.LocalDate.now().plusDays(12))
+        );
+        for (PantryItem p : demo) pantry.put(p.name.toLowerCase(), p);
+        refreshPantryTable();
+        updateShoppingList();
+        showInfo("Seeded", "Added sample pantry items.");
     }
 
     private void showAddItemDialog() {
@@ -281,8 +304,21 @@ public class MainView extends BorderPane {
             } catch (Exception ex) { showError(ex); }
         });
 
-        BorderPane box = new BorderPane(recipeList);
-        box.setTop(new ToolBar(importBtn));
+        Button genBtn = new Button("Generate from Pantry");
+        genBtn.setOnAction(e -> {
+            try {
+                AutoRecipeGenerator gen = new AutoRecipeGenerator();
+                // Use current pantry; default servings 2; generate up to 10
+                List<Recipe> generated = gen.generate(pantry, 2, 10);
+                if (generated.isEmpty()) { showInfo("No ideas", "Not enough pantry variety to auto-generate meals."); return; }
+                recipes = generated;
+                refreshRecipesList();
+                showInfo("Generated", "Created " + recipes.size() + " recipes from your pantry.");
+            } catch (Exception ex) { showError(ex); }
+        });
+
+    BorderPane box = new BorderPane(recipeList);
+    box.setTop(new ToolBar(importBtn, genBtn));
         t.setContent(box);
         return t;
     }
@@ -424,8 +460,11 @@ public class MainView extends BorderPane {
         Button copy = new Button("Copy to Clipboard");
         copy.setOnAction(e -> copyShoppingListToClipboard());
 
-        Button export = new Button("Export CSV…");
+    Button export = new Button("Export CSV…");
         export.setOnAction(e -> exportShoppingListCSV());
+
+    Button consolidated = new Button("Consolidated (Selected)");
+    consolidated.setOnAction(e -> showConsolidatedShoppingDialog());
 
         Button openAll = new Button("Open All in " + storeBox.getValue());
         storeBox.setOnAction(e -> openAll.setText("Open All in " + storeBox.getValue()));
@@ -443,7 +482,7 @@ public class MainView extends BorderPane {
                 new Separator(),
                 new Label("Servings"), servingsSpinner,
                 new Separator(),
-                refresh, copy, export,
+                refresh, copy, export, new Separator(), consolidated,
                 new Separator(), openAll
         );
 
@@ -485,6 +524,31 @@ public class MainView extends BorderPane {
         ClipboardContent cc = new ClipboardContent(); cc.putString(sb.toString());
         Clipboard.getSystemClipboard().setContent(cc);
         showInfo("Copied", "Shopping list copied to clipboard as CSV.");
+    }
+
+    private void showConsolidatedShoppingDialog() {
+        // If specific recipes are selected in the plan list, use those; else use full plan
+        List<Integer> idxs = new ArrayList<>(planList.getSelectionModel().getSelectedIndices());
+        List<Recipe> subset;
+        if (idxs.isEmpty()) subset = lastPlan == null ? List.of() : lastPlan;
+        else {
+            subset = new ArrayList<>();
+            for (int i : idxs) if (i >= 0 && lastPlan != null && i < lastPlan.size()) subset.add(lastPlan.get(i));
+        }
+        if (subset == null || subset.isEmpty()) { showInfo("No recipes", "Select recipes in the Plan tab or create a plan first."); return; }
+        List<ShoppingListService.Line> lines = shopping.compute(subset, pantry, units, aliases);
+        int mult = Math.max(1, servingsSpinner.getValue());
+        if (mult != 1) lines = shopping.scale(lines, mult);
+        if (lines.isEmpty()) { showInfo("Shopping List", "You're all set — nothing missing for the chosen recipes!"); return; }
+        StringBuilder sb = new StringBuilder();
+        for (var ln : lines) sb.append(" • ").append(ln.name).append(": ").append(intOrDec(ln.amount)).append(" ").append(ln.unit).append("\n");
+        TextArea ta = new TextArea(sb.toString());
+        ta.setEditable(false); ta.setWrapText(true); ta.setPrefColumnCount(48); ta.setPrefRowCount(20);
+        Dialog<Void> dlg = new Dialog<>();
+        dlg.setTitle("Consolidated Shopping List");
+        dlg.getDialogPane().setContent(ta);
+        dlg.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+        dlg.showAndWait();
     }
 
     // ---------- Common ----------
