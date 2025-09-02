@@ -22,4 +22,16 @@ public class RuleEngineTests {
         double score = engine.score(r, pantry, Set.of("quick"), 30);
         assertTrue(score >= 80.0);
     }
+
+        @Test
+        void explanationListsMissing() {
+            RuleEngine engine = new RuleEngine();
+            Map<String, PantryItem> pantry = new HashMap<>();
+            Recipe r = new Recipe("Needs Spinach",
+                    List.of(new Ingredient("spinach", 50, "g")), 10, Set.of());
+            RuleExplanation ex = engine.explain(r, pantry, Set.of(), 30);
+            assertEquals(0, ex.haveCount);
+            assertEquals(1, ex.totalIngredients);
+            assertFalse(ex.missing.isEmpty());
+        }
 }
