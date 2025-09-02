@@ -1,0 +1,1 @@
+packageSearchIndex = [{"l":"All Packages","u":"allpackages-index.html"},{"l":"com.example.aipantry"},{"l":"com.example.aipantry.model"},{"l":"com.example.aipantry.services"},{"l":"com.example.aipantry.storage"},{"l":"com.example.aipantry.ui"}];updateSearchResults();
