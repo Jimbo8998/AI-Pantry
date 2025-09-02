@@ -1,5 +1,8 @@
 # AI Pantry
 
+[![CI](https://github.com/Jimbo8998/AI-Pantry/actions/workflows/ci.yml/badge.svg)](https://github.com/Jimbo8998/AI-Pantry/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Smart meal planning and shopping helper built with Java 21, JavaFX, and Maven.
 
 It scores recipes against your pantry, plans meals, consolidates a shopping list, and lets you jump to store searches. Includes sample data and CSV export.
