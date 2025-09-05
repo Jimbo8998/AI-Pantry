@@ -86,3 +86,38 @@ mvnw.cmd -q javadoc:javadoc
 ```
 
 Output will be in `./doc/` (open `doc/index.html`).
+
+## Recipe images
+
+Generated recipes show a photo above the details dialog:
+
+- First, the app tries to pick a local image based on dish tags and key ingredients (e.g., tacos with beef vs beans; pasta with tomato vs coconut; fried rice with egg vs tuna; stir‑fry with beef/chicken/veg; soup)
+- Images are loaded from `src/main/resources/images/` using `res:/images/...` paths.
+- If an image is missing, the UI renders a readable local placeholder card (no internet required) with the title and a brief ingredient list.
+
+Add these files to `src/main/resources/images/` to customize:
+
+```
+tacos_beef.jpg
+tacos_beans.jpg
+pasta_tomato_beef.jpg
+pasta_tomato_chicken.jpg
+pasta_tomato_veg.jpg
+pasta_coconut_veg.jpg
+fried_rice_egg.jpg
+fried_rice_tuna.jpg
+fried_rice_veg.jpg
+stir_fry_beef.jpg
+stir_fry_chicken.jpg
+stir_fry_veg.jpg
+soup_veg.jpg
+placeholder.jpg
+```
+
+Tip: duplicate one image and rename it to the above filenames to verify wiring. The dialog logs can help:
+
+```java
+System.out.println("IMG -> " + resolveRecipeImage(g));
+```
+
+If it prints `res:/images/...` but shows a placeholder, check the exact filename and folder path.
