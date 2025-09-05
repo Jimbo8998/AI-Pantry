@@ -93,8 +93,12 @@ public class MainView extends BorderPane {
     public MainView() {
         setPadding(new Insets(8));
         storeBox.setValue("Walmart");
-    // Ensure image placeholders exist for quick visual sanity checks (dev convenience)
-    ensureDefaultImages();
+        // Ensure image placeholders exist for quick visual sanity checks (dev convenience)
+        // Controlled by settings.autoGenerateImages (defaults to true when unset)
+        try { settings = settingsStorage.load(); } catch (Exception ignore) {}
+        if (settings.autoGenerateImages == null || Boolean.TRUE.equals(settings.autoGenerateImages)) {
+            ensureDefaultImages();
+        }
     planSpinner.setVisible(false);
     planSpinner.setPrefSize(24,24);
         TabPane tabs = new TabPane();

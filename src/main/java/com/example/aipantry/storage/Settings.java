@@ -7,4 +7,6 @@ public class Settings {
     public Integer maxMinutes;
     public Integer servings;
     public String store;
+    // Dev convenience: create placeholder images locally if missing
+    public Boolean autoGenerateImages;
 }
