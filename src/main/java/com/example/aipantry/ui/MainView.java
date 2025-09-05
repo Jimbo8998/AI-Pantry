@@ -93,6 +93,8 @@ public class MainView extends BorderPane {
     public MainView() {
         setPadding(new Insets(8));
         storeBox.setValue("Walmart");
+    // Ensure image placeholders exist for quick visual sanity checks (dev convenience)
+    ensureDefaultImages();
     planSpinner.setVisible(false);
     planSpinner.setPrefSize(24,24);
         TabPane tabs = new TabPane();
@@ -912,7 +914,8 @@ public class MainView extends BorderPane {
     }
 
     /** Choose a real meal photo path based on dish tags + key ingredients.
-     * Returns "res:/images/..." so it loads from src/main/resources/images.
+     * Prefers local resources (res:/images/...). If the resource is missing,
+     * falls back to a local text card with the title + top ingredients.
      * Only respects explicit classpath images in g.imageUrl; ignores remote placeholders.
      */
     private String resolveRecipeImage(AutoRecipeGenerator.Generated g) {
@@ -921,39 +924,69 @@ public class MainView extends BorderPane {
 
         Set<String> tags = g.recipe.tags == null ? Set.of() : g.recipe.tags;
 
+        String res = null;
         if (tags.contains("taco")) {
-            if (hasIng(g, "beef mince") || hasIng(g, "ground beef")) return "res:/images/tacos_beef.jpg";
-            if (hasIng(g, "black bean") || hasIng(g, "chickpea")) return "res:/images/tacos_beans.jpg";
-            return "res:/images/tacos_beans.jpg";
+            if (hasIng(g, "beef mince") || hasIng(g, "ground beef")) res = "res:/images/tacos_beef.jpg";
+            else if (hasIng(g, "black bean") || hasIng(g, "chickpea")) res = "res:/images/tacos_beans.jpg";
+            else res = "res:/images/tacos_beans.jpg";
+            return chooseResOrText(res, textLabelFor(g));
         }
 
         if (tags.contains("pasta")) {
             boolean tomato = hasIng(g, "tomato sauce") || hasIng(g, "canned tomato") || hasIng(g, "tomato") || hasIng(g, "tomatoes");
             boolean coconut = hasIng(g, "coconut milk");
-            if (tomato && hasIng(g, "beef mince")) return "res:/images/pasta_tomato_beef.jpg";
-            if (tomato && (hasIng(g, "chicken breast") || hasIng(g, "chicken thigh")))
-                return "res:/images/pasta_tomato_chicken.jpg";
-            if (tomato) return "res:/images/pasta_tomato_veg.jpg";
-            if (coconut) return "res:/images/pasta_coconut_veg.jpg";
-            return "res:/images/pasta_tomato_veg.jpg";
+            if (tomato && hasIng(g, "beef mince")) res = "res:/images/pasta_tomato_beef.jpg";
+            else if (tomato && (hasIng(g, "chicken breast") || hasIng(g, "chicken thigh"))) res = "res:/images/pasta_tomato_chicken.jpg";
+            else if (tomato) res = "res:/images/pasta_tomato_veg.jpg";
+            else if (coconut) res = "res:/images/pasta_coconut_veg.jpg";
+            else res = "res:/images/pasta_tomato_veg.jpg";
+            return chooseResOrText(res, textLabelFor(g));
         }
 
         if (tags.contains("rice")) { // fried rice
-            if (hasIng(g, "egg")) return "res:/images/fried_rice_egg.jpg";
-            if (hasIng(g, "tuna")) return "res:/images/fried_rice_tuna.jpg";
-            return "res:/images/fried_rice_veg.jpg";
+            if (hasIng(g, "egg")) res = "res:/images/fried_rice_egg.jpg";
+            else if (hasIng(g, "tuna")) res = "res:/images/fried_rice_tuna.jpg";
+            else res = "res:/images/fried_rice_veg.jpg";
+            return chooseResOrText(res, textLabelFor(g));
         }
 
         if (tags.contains("stir-fry")) {
-            if (hasIng(g, "beef mince") || hasIng(g, "ground beef")) return "res:/images/stir_fry_beef.jpg";
-            if (hasIng(g, "chicken breast") || hasIng(g, "chicken thigh"))
-                return "res:/images/stir_fry_chicken.jpg";
-            return "res:/images/stir_fry_veg.jpg";
+            if (hasIng(g, "beef mince") || hasIng(g, "ground beef")) res = "res:/images/stir_fry_beef.jpg";
+            else if (hasIng(g, "chicken breast") || hasIng(g, "chicken thigh")) res = "res:/images/stir_fry_chicken.jpg";
+            else res = "res:/images/stir_fry_veg.jpg";
+            return chooseResOrText(res, textLabelFor(g));
         }
 
-        if (tags.contains("soup")) return "res:/images/soup_veg.jpg";
+        if (tags.contains("soup")) {
+            res = "res:/images/soup_veg.jpg";
+            return chooseResOrText(res, textLabelFor(g));
+        }
 
-        return "res:/images/placeholder.jpg";
+        res = "res:/images/placeholder.jpg";
+        return chooseResOrText(res, textLabelFor(g));
+    }
+
+    private boolean resourceExists(String resRef){
+        if (resRef == null || !resRef.startsWith("res:")) return false;
+        String p = resRef.substring(4);
+        return getClass().getResource(p) != null;
+    }
+    private String chooseResOrText(String resRef, String label){
+        return resourceExists(resRef) ? resRef : ("text:" + label);
+    }
+    private String textLabelFor(AutoRecipeGenerator.Generated g){
+        String title = g.recipe == null || g.recipe.title == null ? "Recipe" : g.recipe.title;
+        // pick top 4 ingredients by amount, skipping basics
+        Set<String> skip = Set.of("oil","olive oil","butter","ghee","salt","pepper","water","broth");
+        List<String> top = new ArrayList<>();
+        if (g.recipe != null && g.recipe.ingredients != null){
+            g.recipe.ingredients.stream()
+                .filter(i -> i != null && i.name != null && !skip.contains(i.name.toLowerCase()))
+                .sorted((a,b) -> Double.compare(b.amount, a.amount))
+                .limit(4)
+                .forEach(i -> top.add(i.name));
+        }
+        return top.isEmpty() ? title : (title + "\n" + String.join(" · ", top));
     }
 
     // Overload for imported recipes without imageUrl
@@ -1075,6 +1108,35 @@ public class MainView extends BorderPane {
 
     private void saveSettingsQuiet() {
         try { settingsStorage.save(settings); } catch (Exception ignore) {}
+    }
+
+    // Developer convenience: create placeholder jpgs on first run if missing
+    private void ensureDefaultImages() {
+        try {
+            String base = System.getProperty("user.dir");
+            File imgDir = new File(base, "src/main/resources/images");
+            if (!imgDir.exists()) return; // don't create dirs automatically
+            String[] names = new String[] {
+                "tacos_beef.jpg","tacos_beans.jpg",
+                "pasta_tomato_beef.jpg","pasta_tomato_chicken.jpg","pasta_tomato_veg.jpg","pasta_coconut_veg.jpg",
+                "fried_rice_egg.jpg","fried_rice_tuna.jpg","fried_rice_veg.jpg",
+                "stir_fry_beef.jpg","stir_fry_chicken.jpg","stir_fry_veg.jpg",
+                "soup_veg.jpg","placeholder.jpg"
+            };
+            for (String n : names) {
+                File f = new File(imgDir, n);
+                if (!f.exists()) savePlaceholderJpg(f, n.replace('_',' ').replace(".jpg",""));
+            }
+        } catch (Exception ignore) {}
+    }
+
+    private void savePlaceholderJpg(File file, String label) {
+        try {
+            Image fxImg = generatePlaceholderImage(label, 800, 500);
+            java.awt.image.BufferedImage bimg = javafx.embed.swing.SwingFXUtils.fromFXImage(fxImg, null);
+            file.getParentFile().mkdirs();
+            javax.imageio.ImageIO.write(bimg, "jpg", file);
+        } catch (Exception ignore) {}
     }
 
     // Async planning to keep UI responsive
