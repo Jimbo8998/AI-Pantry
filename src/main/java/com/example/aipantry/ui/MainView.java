@@ -14,6 +14,13 @@ import javafx.scene.input.Clipboard;
 import javafx.scene.input.ClipboardContent;
 import javafx.collections.FXCollections;
 import javafx.concurrent.Task;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.image.WritableImage;
+import javafx.scene.canvas.Canvas;
+import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.paint.Color;
+import javafx.scene.text.Font;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -32,7 +39,11 @@ import com.example.aipantry.storage.SettingsStorage;
 public class MainView extends BorderPane {
 
     private final TableView<PantryItem> pantryTable = new TableView<>();
-    private final ListView<String> recipeList = new ListView<>();
+    private final ListView<Recipe> recipeList = new ListView<>();
+    private final ListView<AutoRecipeGenerator.Generated> generatedList = new ListView<>();
+    // Generator controls
+    private final Spinner<Integer> genServingsSpinner = new Spinner<>(1, 20, 4);
+    private final Spinner<Integer> genLimitSpinner = new Spinner<>(0, 500, 10); // 0 = unlimited
     private final ListView<String> planList = new ListView<>();
     private final TableView<ShoppingListService.Line> shoppingTable = new TableView<>();
 
@@ -197,7 +208,7 @@ public class MainView extends BorderPane {
             }
         });
 
-        Button add = new Button("Add Item");
+    Button add = new Button("Add Item");
         add.setOnAction(e -> showAddItemDialog());
 
     Button del = new Button("Delete Selected");
@@ -211,7 +222,7 @@ public class MainView extends BorderPane {
             }
         });
 
-    Button save = new Button("Save Pantry JSON…");
+        Button save = new Button("Save Pantry JSON…");
         save.setOnAction(e -> {
             try {
                 FileChooser fc = new FileChooser();
@@ -222,12 +233,18 @@ public class MainView extends BorderPane {
             } catch (Exception ex) { showError(ex); }
         });
 
+        Button importCsv = new Button("Import Pantry CSV…");
+        importCsv.setOnAction(e -> importPantryCSV());
+
+        Button exportCsv = new Button("Export Pantry CSV…");
+        exportCsv.setOnAction(e -> exportPantryCSV());
+
     Button seed = new Button("Seed Sample Pantry");
     seed.setOnAction(e -> seedSamplePantry());
 
     Button undoBtn = new Button("Undo");
     undoBtn.setOnAction(e -> doUndo());
-    ToolBar tb = new ToolBar(add, del, undoBtn, new Separator(), save, new Separator(), seed);
+    ToolBar tb = new ToolBar(add, del, undoBtn, new Separator(), save, importCsv, exportCsv, new Separator(), seed);
         BorderPane box = new BorderPane(pantryTable);
         box.setTop(tb);
         t.setContent(box);
@@ -260,11 +277,16 @@ public class MainView extends BorderPane {
         GridPane g = new GridPane(); g.setHgap(8); g.setVgap(8); g.setPadding(new Insets(8));
     TextField name = new TextField(); name.setPromptText("e.g., spinach");
         TextField qty = new TextField("1");
-    TextField unit = new TextField("piece");
+    ComboBox<String> unit = new ComboBox<>(FXCollections.observableArrayList(
+            "g","kg","oz","lb",
+            "ml","l","tsp","tbsp","floz","cup","pint","quart","gallon",
+            "piece","can","egg","clove"));
+        unit.setEditable(true);
+        unit.setValue("piece");
         DatePicker dp = new DatePicker();
         g.addRow(0, new Label("Name"), name);
         g.addRow(1, new Label("Quantity"), qty);
-        g.addRow(2, new Label("Unit"), unit);
+    g.addRow(2, new Label("Unit"), unit);
         g.addRow(3, new Label("Expires"), dp);
         d.getDialogPane().setContent(g);
         d.getDialogPane().getButtonTypes().addAll(ButtonType.OK, ButtonType.CANCEL);
@@ -275,7 +297,7 @@ public class MainView extends BorderPane {
             double q;
             try { q = Double.parseDouble(qty.getText().trim()); } catch (Exception ex) { showError(new IllegalArgumentException("Quantity must be a number.")); return null; }
             if (q < 0) { showError(new IllegalArgumentException("Quantity must be non-negative.")); return null; }
-            String u = unit.getText() == null ? null : unit.getText().trim();
+            String u = unit.getValue();
             if (u == null || u.isBlank()) { showError(new IllegalArgumentException("Unit cannot be blank.")); return null; }
             String nu = units.normalizeUnit(u);
             if (!units.isKnownUnit(nu)) { showError(new IllegalArgumentException("Unknown unit: " + u)); return null; }
@@ -287,6 +309,91 @@ public class MainView extends BorderPane {
                 refreshPantryTable();
             }
         });
+    }
+
+    // Import / Export pantry as CSV (name,quantity,unit,expires)
+    public void importPantryCSV() {
+        try {
+            FileChooser fc = new FileChooser();
+            fc.setTitle("Import Pantry CSV");
+            fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV", "*.csv"));
+            File f = fc.showOpenDialog(getWindow()); if (f == null) return;
+            List<String> lines = java.nio.file.Files.readAllLines(f.toPath(), StandardCharsets.UTF_8);
+            if (lines.isEmpty()) { showInfo("Import", "File is empty."); return; }
+            Map<String, PantryItem> loaded = new LinkedHashMap<>();
+            boolean first = true;
+            for (String line : lines) {
+                if (line == null) continue; line = line.trim(); if (line.isEmpty()) continue;
+                if (first && line.toLowerCase(Locale.ROOT).startsWith("name,")) { first = false; continue; }
+                first = false;
+                String[] parts = parseCsvLine(line);
+                String name = parts.length>0 ? parts[0].trim() : "";
+                if (name.isEmpty()) continue;
+                double qty = 1.0; try { qty = Double.parseDouble(parts.length>1? parts[1].trim() : "1"); } catch (Exception ignore) {}
+                String unit = parts.length>2? parts[2].trim() : "piece";
+                String exps = parts.length>3? parts[3].trim() : "";
+                java.time.LocalDate d = null; if (!exps.isBlank()) try { d = java.time.LocalDate.parse(exps); } catch (Exception ignore) {}
+                String nu = units.normalizeUnit(unit);
+                loaded.put(name.toLowerCase(), new PantryItem(name, qty, nu, d));
+            }
+            pantry = loaded;
+            refreshPantryTable();
+            updateShoppingList();
+            showInfo("Import", "Pantry loaded: " + pantry.size() + " items.");
+        } catch (Exception ex) { showError(ex); }
+    }
+
+    public void exportPantryCSV() {
+        try {
+            FileChooser fc = new FileChooser();
+            fc.setTitle("Export Pantry CSV");
+            fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV", "*.csv"));
+            fc.setInitialFileName("pantry.csv");
+            File f = fc.showSaveDialog(getWindow()); if (f == null) return;
+            try (Writer w = new OutputStreamWriter(new FileOutputStream(f), StandardCharsets.UTF_8)) {
+                w.write("name,quantity,unit,expires\n");
+                java.time.format.DateTimeFormatter fmt = java.time.format.DateTimeFormatter.ISO_DATE;
+                for (PantryItem p : pantry.values()) {
+                    String exp = p.expiresOn==null? "" : fmt.format(p.expiresOn);
+                    w.write(escapeCsv(p.name)); w.write(",");
+                    w.write(String.valueOf(p.quantity)); w.write(",");
+                    w.write(escapeCsv(p.unit)); w.write(",");
+                    w.write(escapeCsv(exp)); w.write("\n");
+                }
+            }
+        } catch (Exception ex) { showError(ex); }
+    }
+
+    private static String escapeCsv(String s) {
+        if (s == null) return "";
+        if (s.contains(",") || s.contains("\"") || s.contains("\n")) {
+            s = s.replace("\"", "\"\"");
+            return "\"" + s + "\"";
+        }
+        return s;
+    }
+
+    private static String[] parseCsvLine(String line) {
+        List<String> out = new ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        boolean inQuotes = false;
+        for (int i=0; i<line.length(); i++) {
+            char c = line.charAt(i);
+            if (inQuotes) {
+                if (c == '"') {
+                    if (i+1 < line.length() && line.charAt(i+1) == '"') { cur.append('"'); i++; }
+                    else { inQuotes = false; }
+                } else {
+                    cur.append(c);
+                }
+            } else {
+                if (c == '"') { inQuotes = true; }
+                else if (c == ',') { out.add(cur.toString()); cur.setLength(0); }
+                else { cur.append(c); }
+            }
+        }
+        out.add(cur.toString());
+        return out.toArray(new String[0]);
     }
 
     // (no-op placeholder removed)
@@ -304,21 +411,65 @@ public class MainView extends BorderPane {
             } catch (Exception ex) { showError(ex); }
         });
 
-        Button genBtn = new Button("Generate from Pantry");
+    // Configure generator controls
+    genLimitSpinner.setEditable(true);
+    genLimitSpinner.setTooltip(new Tooltip("0 = unlimited"));
+
+    Button genBtn = new Button("Generate from Pantry");
         genBtn.setOnAction(e -> {
             try {
                 AutoRecipeGenerator gen = new AutoRecipeGenerator();
-                // Use current pantry; default servings 2; generate up to 10
-                List<Recipe> generated = gen.generate(pantry, 2, 10);
-                if (generated.isEmpty()) { showInfo("No ideas", "Not enough pantry variety to auto-generate meals."); return; }
-                recipes = generated;
+        int servings = Math.max(1, genServingsSpinner.getValue());
+        int limit = genLimitSpinner.getValue(); // 0 => unlimited
+        List<AutoRecipeGenerator.Generated> gens = gen.generateDetailed(pantry, servings, limit);
+                if (gens.isEmpty()) { showInfo("No ideas", "Not enough pantry variety to auto-generate meals."); return; }
+                generatedList.setItems(FXCollections.observableArrayList(gens));
+                // Feed generated recipes into planner source
+                recipes = gens.stream().map(g -> g.recipe).collect(Collectors.toList());
                 refreshRecipesList();
-                showInfo("Generated", "Created " + recipes.size() + " recipes from your pantry.");
             } catch (Exception ex) { showError(ex); }
         });
 
-    BorderPane box = new BorderPane(recipeList);
-    box.setTop(new ToolBar(importBtn, genBtn));
+        // Show "Title (Xm)" for each recipe
+        recipeList.setCellFactory(lv -> new ListCell<>() {
+            @Override protected void updateItem(Recipe r, boolean empty) {
+                super.updateItem(r, empty);
+                setText(empty || r==null ? null : r.title + " (" + r.cookMinutes + "m)");
+            }
+        });
+        // Generated list renderer + double-click handler
+        generatedList.setCellFactory(lv -> new ListCell<>() {
+            @Override protected void updateItem(AutoRecipeGenerator.Generated g, boolean empty) {
+                super.updateItem(g, empty);
+                setText(empty || g==null ? null : g.recipe.title + " (" + g.recipe.cookMinutes + "m)");
+            }
+        });
+        generatedList.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2) {
+                AutoRecipeGenerator.Generated sel = generatedList.getSelectionModel().getSelectedItem();
+                if (sel != null) showGeneratedRecipe(sel);
+            }
+        });
+        // Open details on double-click
+        recipeList.setOnMouseClicked(e -> {
+            if (e.getClickCount() == 2) {
+                Recipe sel = recipeList.getSelectionModel().getSelectedItem();
+                if (sel != null) showRecipeDetails(sel);
+            }
+        });
+
+    SplitPane lists = new SplitPane(recipeList, generatedList);
+        lists.setDividerPositions(0.5);
+    BorderPane box = new BorderPane(lists);
+    box.setTop(new ToolBar(
+        importBtn,
+        new Separator(),
+        new Label("Servings"), genServingsSpinner,
+        new Label("Limit"), genLimitSpinner,
+        genBtn,
+        new Separator(),
+        new Label("(Left: Imported · Right: Generated)")
+    ));
         t.setContent(box);
         return t;
     }
@@ -569,7 +720,9 @@ public class MainView extends BorderPane {
              InputStream aIn = getClass().getResourceAsStream("/sample-data/aliases.json");
              InputStream uIn = getClass().getResourceAsStream("/sample-data/units.json");
              InputStream sIn = getClass().getResourceAsStream("/sample-data/aisles.json")) {
-            pantry = storage.loadPantry(pIn);
+            InputStream pFull = getClass().getResourceAsStream("/sample-data/pantry_full.json");
+            InputStream pantryStream = (pFull != null) ? pFull : pIn;
+            pantry = storage.loadPantry(pantryStream);
             recipes = storage.loadRecipes(rIn);
             aliases = new AliasResolver(storage.loadAliases(aIn));
             units = new Units(storage.loadUnits(uIn));
@@ -684,8 +837,7 @@ public class MainView extends BorderPane {
 
     private void refreshPantryTable() { pantryTable.getItems().setAll(pantry.values()); }
     private void refreshRecipesList() {
-        recipeList.getItems().setAll(recipes.stream()
-                .map(r -> r.title + " (" + r.cookMinutes + "m)").collect(Collectors.toList()));
+    recipeList.getItems().setAll(recipes);
     }
     private Window getWindow() { return getScene() != null ? getScene().getWindow() : null; }
 
@@ -693,6 +845,228 @@ public class MainView extends BorderPane {
         ex.printStackTrace();
         Alert a = new Alert(Alert.AlertType.ERROR, String.valueOf(ex), ButtonType.OK);
         a.setHeaderText("Error"); a.showAndWait();
+    }
+
+    private void showRecipeDetails(Recipe r) {
+        try {
+            StringBuilder sb = new StringBuilder();
+            sb.append(r.title).append("\n\nIngredients:\n");
+            for (var ing : r.ingredients) {
+                sb.append(" • ")
+                  .append(intOrDec(ing.amount))
+                  .append(ing.unit==null?"":" "+ing.unit)
+                  .append(" ")
+                  .append(ing.name)
+                  .append("\n");
+            }
+            // Resolve by tags, fallback to placeholder
+            String ref = resolveRecipeImage(r);
+            ImageView imageView = new ImageView(loadImageRef(ref));
+            imageView.setPreserveRatio(true);
+            imageView.setFitWidth(520);
+
+            TextArea ta = new TextArea(sb.toString());
+            ta.setEditable(false); ta.setWrapText(true);
+            ta.setPrefColumnCount(60); ta.setPrefRowCount(24);
+
+            VBox v = new VBox(10, imageView, ta);
+            v.setPadding(new Insets(10));
+
+            Dialog<Void> dlg = new Dialog<>();
+            dlg.setTitle("Recipe");
+            dlg.getDialogPane().setContent(v);
+            dlg.getDialogPane().getButtonTypes().add(ButtonType.CLOSE);
+            dlg.showAndWait();
+        } catch (Exception ex) { showError(ex); }
+    }
+
+    private void showGeneratedRecipe(AutoRecipeGenerator.Generated g) {
+        try {
+            StringBuilder sb = new StringBuilder();
+            sb.append(g.recipe.title).append("\n\nIngredients:\n");
+            for (var ri : g.recipe.ingredients) {
+                sb.append(" • ")
+                  .append(String.format(Locale.US, "%.2f %s %s", ri.amount, ri.unit, ri.name))
+                  .append("\n");
+            }
+            sb.append("\nSteps:\n");
+            int i=1; for (String step : g.steps) sb.append(" ").append(i++).append(". ").append(step).append("\n");
+
+            String ref = resolveRecipeImage(g);
+            ImageView img = new ImageView(loadImageRef(ref));
+            img.setPreserveRatio(true); img.setFitWidth(520);
+
+            TextArea ta = new TextArea(sb.toString()); ta.setEditable(false); ta.setWrapText(true);
+            VBox box = new VBox(10, img, ta); box.setPadding(new Insets(10));
+
+            Dialog<Void> d = new Dialog<>(); d.setTitle("Recipe"); d.getDialogPane().setContent(box);
+            d.getDialogPane().getButtonTypes().add(ButtonType.CLOSE); d.showAndWait();
+        } catch (Exception ex) { showError(ex); }
+    }
+
+    // Helper: does generated recipe include an ingredient by exact name (case-insensitive)?
+    private boolean hasIng(AutoRecipeGenerator.Generated g, String name){
+        String n = name == null ? "" : name.toLowerCase();
+        return g.recipe != null && g.recipe.ingredients != null &&
+                g.recipe.ingredients.stream().anyMatch(ri -> ri != null && ri.name != null && ri.name.equalsIgnoreCase(n));
+    }
+
+    /** Choose a real meal photo path based on dish tags + key ingredients.
+     * Returns "res:/images/..." so it loads from src/main/resources/images.
+     * Only respects explicit classpath images in g.imageUrl; ignores remote placeholders.
+     */
+    private String resolveRecipeImage(AutoRecipeGenerator.Generated g) {
+        // Only respect explicit classpath images; ignore remote placeholders from the generator
+        if (g.imageUrl != null && g.imageUrl.startsWith("res:")) return g.imageUrl;
+
+        Set<String> tags = g.recipe.tags == null ? Set.of() : g.recipe.tags;
+
+        if (tags.contains("taco")) {
+            if (hasIng(g, "beef mince") || hasIng(g, "ground beef")) return "res:/images/tacos_beef.jpg";
+            if (hasIng(g, "black bean") || hasIng(g, "chickpea")) return "res:/images/tacos_beans.jpg";
+            return "res:/images/tacos_beans.jpg";
+        }
+
+        if (tags.contains("pasta")) {
+            boolean tomato = hasIng(g, "tomato sauce") || hasIng(g, "canned tomato") || hasIng(g, "tomato") || hasIng(g, "tomatoes");
+            boolean coconut = hasIng(g, "coconut milk");
+            if (tomato && hasIng(g, "beef mince")) return "res:/images/pasta_tomato_beef.jpg";
+            if (tomato && (hasIng(g, "chicken breast") || hasIng(g, "chicken thigh")))
+                return "res:/images/pasta_tomato_chicken.jpg";
+            if (tomato) return "res:/images/pasta_tomato_veg.jpg";
+            if (coconut) return "res:/images/pasta_coconut_veg.jpg";
+            return "res:/images/pasta_tomato_veg.jpg";
+        }
+
+        if (tags.contains("rice")) { // fried rice
+            if (hasIng(g, "egg")) return "res:/images/fried_rice_egg.jpg";
+            if (hasIng(g, "tuna")) return "res:/images/fried_rice_tuna.jpg";
+            return "res:/images/fried_rice_veg.jpg";
+        }
+
+        if (tags.contains("stir-fry")) {
+            if (hasIng(g, "beef mince") || hasIng(g, "ground beef")) return "res:/images/stir_fry_beef.jpg";
+            if (hasIng(g, "chicken breast") || hasIng(g, "chicken thigh"))
+                return "res:/images/stir_fry_chicken.jpg";
+            return "res:/images/stir_fry_veg.jpg";
+        }
+
+        if (tags.contains("soup")) return "res:/images/soup_veg.jpg";
+
+        return "res:/images/placeholder.jpg";
+    }
+
+    // Overload for imported recipes without imageUrl
+    private String resolveRecipeImage(Recipe r) {
+        Set<String> tags = r.tags == null ? Set.of() : r.tags;
+        if (tags.contains("taco"))     return "res:/images/tacos.jpg";
+        if (tags.contains("stir-fry")) return "res:/images/stir_fry.jpg";
+        if (tags.contains("pasta"))    return "res:/images/pasta.jpg";
+        if (tags.contains("rice"))     return "res:/images/fried_rice.jpg";
+        if (tags.contains("soup"))     return "res:/images/soup.jpg";
+        return generateRecipeImageUrl(r.title);
+    }
+
+    // Build a readable, unique image URL for a recipe title using a placeholder service; loader has offline fallback.
+    private String generateRecipeImageUrl(String title) {
+        String t = (title == null || title.isBlank()) ? "Recipe" : title;
+        return "https://placehold.co/600x400?text=" + URLEncoder.encode(t, StandardCharsets.UTF_8);
+    }
+
+
+    // Load Image from a classpath ref (res:/...) or URL, with safe fallback
+    private Image loadImageRef(String ref) {
+        try {
+            if (ref != null && ref.startsWith("res:")) {
+                String path = ref.substring(4);
+                var url = getClass().getResource(path);
+                if (url != null) return new Image(url.toExternalForm(), true);
+                // classpath resource missing → fall through to category placeholder
+                String name = new File(path).getName();
+                String label = name.contains(".") ? name.substring(0, name.lastIndexOf('.')) : name;
+                String text = label.replace('_', ' ');
+                return generatePlaceholderImage(text, 800, 500);
+            } else if (ref != null && ref.startsWith("text:")) {
+                String text = ref.substring(5);
+                return generatePlaceholderImage(text, 800, 500);
+            } else if (ref != null && (ref.startsWith("http://") || ref.startsWith("https://"))) {
+                Image remote = new Image(ref, true);
+                // If remote fails, show a generic placeholder locally
+                if (remote.isError()) return generatePlaceholderImage("Recipe", 800, 500);
+                return remote;
+            }
+        } catch (Exception ignore) { }
+        // ultimate fallback placeholder
+        return generatePlaceholderImage("Recipe", 800, 500);
+    }
+
+    private Image generatePlaceholderImage(String label, int w, int h) {
+        try {
+            Canvas canvas = new Canvas(w, h);
+            GraphicsContext g = canvas.getGraphicsContext2D();
+            // Background
+            g.setFill(Color.web("#e0e7ff"));
+            g.fillRect(0, 0, w, h);
+            // Border
+            g.setStroke(Color.web("#94a3b8"));
+            g.setLineWidth(2);
+            g.strokeRect(3, 3, w-6, h-6);
+            // Text
+            String text = (label == null || label.isBlank()) ? "Recipe" : label;
+            String[] lines = text.split("\\n");
+            g.setFill(Color.web("#0f172a"));
+            double margin = 24;
+            double maxWidth = w - margin*2;
+            // Draw title larger, subsequent lines smaller
+            double y = margin * 2;
+            for (int idx=0; idx<lines.length; idx++){
+                String ln = lines[idx];
+                double baseSize = idx==0 ? 36 : 20;
+                // Simple downscale to fit width
+                double size = baseSize;
+                g.setFont(Font.font("System", size));
+                while (computeTextWidthApprox(ln, size) > maxWidth && size > 12) {
+                    size -= 1.0; g.setFont(Font.font("System", size));
+                }
+                // Wrap long ingredient lines by words
+                for (String wrapped : wrapLine(ln, size, maxWidth)){
+                    double tx = (w - Math.min(maxWidth, computeTextWidthApprox(wrapped, size))) / 2.0;
+                    g.fillText(wrapped, tx, y);
+                    y += size + 8;
+                }
+                y += (idx==0 ? 8 : 0);
+            }
+            WritableImage img = new WritableImage(w, h);
+            return canvas.snapshot(null, img);
+        } catch (Exception e) {
+            WritableImage img = new WritableImage(1, 1);
+            return img;
+        }
+    }
+
+    // Approximate width since we don't have FontMetrics; good enough for centering
+    private double computeTextWidthApprox(String s, double fontSize){
+        if (s == null) return 0;
+        return fontSize * 0.55 * s.length();
+    }
+    private List<String> wrapLine(String s, double fontSize, double maxWidth){
+        List<String> out = new ArrayList<>();
+        if (s == null || s.isBlank()) { out.add(""); return out; }
+        String[] words = s.split(" ");
+        StringBuilder cur = new StringBuilder();
+        for (String w : words){
+            String trial = cur.length()==0? w : cur + " " + w;
+            if (computeTextWidthApprox(trial, fontSize) > maxWidth && cur.length()>0){
+                out.add(cur.toString());
+                cur.setLength(0);
+                cur.append(w);
+            } else {
+                cur.setLength(0);
+                cur.append(trial);
+            }
+        }
+        if (cur.length()>0) out.add(cur.toString());
+        return out;
     }
     private void showInfo(String header, String msg) {
         Alert a = new Alert(Alert.AlertType.INFORMATION, msg, ButtonType.OK);

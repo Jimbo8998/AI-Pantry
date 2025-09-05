@@ -23,8 +23,15 @@ hs_err_pid*
 # Build outputs
 bin/
 
+# Canvas package build output
+canvas_pkg/target/
+
 # Local settings
 *.local.json
 
 # Generated docs (optional to include; uncomment to ignore)
 # doc/
+
+# Packaging artifacts
+AI-Pantry-Canvas.zip
+canvas_pkg/

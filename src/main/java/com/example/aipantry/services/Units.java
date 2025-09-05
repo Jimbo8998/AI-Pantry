@@ -15,9 +15,24 @@ public class Units {
             // volume
             if (this.units.containsKey("ml")) {
                 if (!this.units.containsKey("l")) this.units.put("l", Map.of("to_ml", 1000.0));
-                if (!this.units.containsKey("tbsp")) this.units.put("tbsp", Map.of("to_ml", 15.0));
+                // common culinary units relative to ml
+                if (!this.units.containsKey("tsp")) this.units.put("tsp", Map.of("to_ml", 4.92892));
+                if (!this.units.containsKey("tbsp")) this.units.put("tbsp", Map.of("to_ml", 14.7868));
+                if (!this.units.containsKey("floz")) this.units.put("floz", Map.of("to_ml", 29.5735));
+                if (!this.units.containsKey("cup")) this.units.put("cup", Map.of("to_ml", 236.588));
+                if (!this.units.containsKey("pint")) this.units.put("pint", Map.of("to_ml", 473.176));
+                if (!this.units.containsKey("quart")) this.units.put("quart", Map.of("to_ml", 946.353));
+                if (!this.units.containsKey("gallon")) this.units.put("gallon", Map.of("to_ml", 3785.41));
             }
             // pieces exist by default in sample data
+            if (this.units.containsKey("piece")) {
+                // Treat other count-style units as equivalent to a piece for arithmetic aggregation
+                if (!this.units.containsKey("can")) this.units.put("can", Map.of("to_piece", 1.0));
+                if (!this.units.containsKey("egg")) this.units.put("egg", Map.of("to_piece", 1.0));
+                if (!this.units.containsKey("clove")) this.units.put("clove", Map.of("to_piece", 1.0));
+                if (!this.units.containsKey("slice")) this.units.put("slice", Map.of("to_piece", 1.0));
+                if (!this.units.containsKey("item")) this.units.put("item", Map.of("to_piece", 1.0));
+            }
         }
     }
     public double convert(double amount, String from, String to) {
@@ -74,9 +89,16 @@ public class Units {
             case "kilogram": case "kilograms": case "kgs": case "kg": return "kg";
             case "milliliter": case "millilitre": case "milliliters": case "millilitres": return "ml";
             case "liter": case "litre": case "liters": case "litres": return "l";
+            case "teaspoon": case "teaspoons": case "tsp": return "tsp";
             case "tablespoon": case "tablespoons": case "tbsp": return "tbsp";
+            case "fluid ounce": case "fluid ounces": case "fl oz": case "floz": return "floz";
+            case "cup": case "cups": return "cup";
+            case "pint": case "pints": return "pint";
+            case "quart": case "quarts": return "quart";
+            case "gallon": case "gallons": case "gal": case "gals": return "gallon";
             
-            case "piece": case "pieces": case "pc": case "pcs": return "piece";
+            case "piece": case "pieces": case "pc": case "pcs": case "each": case "ea": case "ct": return "piece";
+            case "cans": return "can";
             default:
                 // leave as-is but trimmed/lowercased
                 return u;

@@ -31,11 +31,13 @@ public class App extends Application {
     MenuItem load = new MenuItem("Load Sample Data"); load.setOnAction(e -> main.loadSampleData());
     MenuItem openPantry = new MenuItem("Open Pantry JSON…"); openPantry.setOnAction(e -> main.openPantryJson());
     MenuItem openRecipes = new MenuItem("Open Recipes JSON…"); openRecipes.setOnAction(e -> main.openRecipesJson());
+    MenuItem importPantryCsv = new MenuItem("Import Pantry CSV…"); importPantryCsv.setOnAction(e -> main.importPantryCSV());
+    MenuItem exportPantryCsv = new MenuItem("Export Pantry CSV…"); exportPantryCsv.setOnAction(e -> main.exportPantryCSV());
     MenuItem export = new MenuItem("Export Shopping List (CSV)"); export.setOnAction(e -> main.exportShoppingListCSV());
         MenuItem exportPlan = new MenuItem("Export Plan (CSV)"); exportPlan.setOnAction(e -> main.exportPlanCSV());
         MenuItem printPlan = new MenuItem("Print Plan"); printPlan.setOnAction(e -> main.printPlan());
         MenuItem exit = new MenuItem("Exit"); exit.setAccelerator(KeyCombination.keyCombination("Ctrl+Q")); exit.setOnAction(e -> System.exit(0));
-        file.getItems().addAll(load, openPantry, openRecipes, export, exportPlan, printPlan, new SeparatorMenuItem(), exit);
+        file.getItems().addAll(load, openPantry, openRecipes, importPantryCsv, exportPantryCsv, new SeparatorMenuItem(), export, exportPlan, printPlan, new SeparatorMenuItem(), exit);
 
         Menu plan = new Menu("Plan");
     MenuItem plan3 = new MenuItem("Plan 3 Meals (Quick)"); plan3.setOnAction(e -> main.planMeals(3, 30));

@@ -1,1 +1,9 @@
-{ "bell pepper": ["red pepper", "capsicum"] }
+{
+	"bell pepper": ["red pepper", "capsicum", "bell peppers"],
+	"black bean": ["black beans"],
+	"chickpea": ["chickpeas"],
+	"egg": ["eggs"],
+	"carrot": ["carrots"],
+	"tortilla": ["tortillas"],
+	"tuna": ["tuna"]
+}

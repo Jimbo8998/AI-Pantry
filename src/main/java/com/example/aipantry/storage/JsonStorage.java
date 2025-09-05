@@ -6,9 +6,13 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.example.aipantry.model.*;
 import java.io.*;
 import java.util.*;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 public class JsonStorage {
-    private final ObjectMapper mapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+    private final ObjectMapper mapper = new ObjectMapper()
+            .enable(SerializationFeature.INDENT_OUTPUT)
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+            .registerModule(new JavaTimeModule());
 
     public List<Recipe> loadRecipes(InputStream in) throws IOException {
         try {
@@ -18,15 +22,33 @@ public class JsonStorage {
         }
     }
     public Map<String, PantryItem> loadPantry(InputStream in) throws IOException {
-        List<PantryItem> list;
+        byte[] data = readAll(in);
+        List<PantryItem> list = null;
+        IOException last = null;
         try {
-            list = mapper.readValue(in, new TypeReference<List<PantryItem>>(){});
-        } catch (IOException ex) {
-            throw new IOException("Failed to parse pantry JSON. Ensure it is an array of PantryItem objects.", ex);
+            list = mapper.readValue(new ByteArrayInputStream(data), new TypeReference<List<PantryItem>>(){});
+        } catch (IOException ex) { last = ex; }
+        if (list == null) {
+            try {
+                PantryWrapper wrap = mapper.readValue(new ByteArrayInputStream(data), PantryWrapper.class);
+                if (wrap != null) list = wrap.pantry;
+            } catch (IOException ex) { last = ex; }
+        }
+        if (list == null) {
+            throw new IOException("Failed to parse pantry JSON. Provide an array of PantryItems or {\"pantry\":[...] }.", last);
         }
         Map<String, PantryItem> map = new LinkedHashMap<>();
-        for (PantryItem p : list) map.put(p.name.toLowerCase(), p);
+        for (PantryItem p : list) if (p!=null && p.name!=null) map.put(p.name.toLowerCase(), p);
         return map;
+    }
+
+    public static class PantryWrapper { public List<PantryItem> pantry; }
+
+    private static byte[] readAll(InputStream in) throws IOException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        byte[] buf = new byte[8192]; int r;
+        while ((r = in.read(buf)) != -1) bos.write(buf, 0, r);
+        return bos.toByteArray();
     }
     public Map<String, List<String>> loadAliases(InputStream in) throws IOException {
         try {
